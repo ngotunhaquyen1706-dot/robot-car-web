@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bang dieu khien Xe</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f0e;
+    --panel:#111815;
+    --line:#22322c;
+    --amber:#ffb454;
+    --cyan:#5fd0c4;
+    --red:#ff5c5c;
+    --text:#dfe8e4;
+    --muted:#7d9089;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'JetBrains Mono','Courier New',monospace;
+    min-height:100vh;
+  }
+  header{
+    padding:18px 24px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px;
+  }
+  header h1{
+    font-size:15px; letter-spacing:.18em; margin:0; font-weight:600;
+    color:var(--amber); text-transform:uppercase;
+  }
+  .badge-group{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+  .badge{
+    display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted);
+  }
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--red); box-shadow:0 0 8px var(--red);}
+  .dot.on{background:var(--cyan); box-shadow:0 0 8px var(--cyan);}
+
+  .layout{
+    display:grid; grid-template-columns: 340px 1fr 300px;
+    gap:1px; background:var(--line);
+  }
+  @media (max-width: 980px){ .layout{grid-template-columns:1fr;} }
+
+  .col{background:var(--bg); padding:20px;}
+
+  .section-label{
+    font-size:11px; letter-spacing:.14em; color:var(--muted);
+    text-transform:uppercase; margin:0 0 12px 0; border-left:2px solid var(--cyan);
+    padding-left:8px;
+  }
+
+  /* ===== Nut BAT DAU ===== */
+  #btnStart{
+    width:100%; padding:14px; font-family:inherit; font-size:13px; letter-spacing:.08em;
+    background:var(--cyan); color:#06231e; border:none; border-radius:3px; cursor:pointer;
+    font-weight:700; text-transform:uppercase; margin-bottom:18px;
+  }
+  #btnStart.running{background:var(--red); color:#2a0a0a;}
+
+  /* ===== D-pad ===== */
+  .dpad{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px;
+  }
+  .dpad button{
+    aspect-ratio:1; background:var(--panel); border:1px solid var(--line); color:var(--text);
+    border-radius:4px; cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:.05em;
+    display:flex; align-items:center; justify-content:center; transition:.12s;
+  }
+  .dpad button:hover{border-color:var(--cyan); color:var(--cyan);}
+  .dpad button:active{background:var(--cyan); color:#06231e;}
+  .dpad .empty{background:transparent; border:none; cursor:default;}
+  #btnDung{color:var(--red);}
+  #btnDung:hover{border-color:var(--red); color:var(--red);}
+  #btnDung:active{background:var(--red); color:#1a0303;}
+
+  .rotrow{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:20px;}
+  .rotrow button{
+    padding:10px; background:var(--panel); border:1px solid var(--line); color:var(--amber);
+    border-radius:4px; cursor:pointer; font-family:inherit; font-size:11px; letter-spacing:.05em;
+  }
+  .rotrow button:hover{border-color:var(--amber);}
+  .rotrow button:active{background:var(--amber); color:#2a1900;}
+
+  /* ===== Toc do ===== */
+  .speed-row{display:flex; align-items:center; gap:10px;}
+  input[type=range]{flex:1; accent-color:var(--amber);}
+  #speedVal{width:38px; text-align:right; color:var(--amber); font-size:13px;}
+
+  /* ===== Radar (canvas) ===== */
+  #radarWrap{display:flex; flex-direction:column; align-items:center;}
+  canvas{border-radius:50%; background:radial-gradient(circle at 50% 50%, #0e1613 0%, #070a09 100%);}
+  .radar-meta{display:flex; gap:22px; margin-top:14px; font-size:11px; color:var(--muted);}
+  .radar-meta b{color:var(--cyan); font-weight:600;}
+
+  /* ===== Lich su ===== */
+  #history{list-style:none; padding:0; margin:0; font-size:12px;}
+  #history li{
+    display:flex; justify-content:space-between; gap:8px;
+    padding:8px 0; border-bottom:1px solid var(--line); color:var(--muted);
+  }
+  #history li:first-child{color:var(--cyan);}
+  #history .h-cmd{color:var(--text);}
+  #history li:first-child .h-cmd{color:var(--cyan);}
+  #history .h-src{opacity:.6; font-size:10px; text-transform:uppercase;}
+
+  /* ===== Log nhan dien mic (real-time, mat do day hon history) ===== */
+  #micLog{
+    list-style:none; padding:0; margin:0; font-size:11px;
+    max-height:320px; overflow-y:auto;
+  }
+  #micLog li{
+    display:flex; justify-content:space-between; gap:6px;
+    padding:6px 0; border-bottom:1px solid var(--line); color:var(--muted);
+  }
+  #micLog li.sent{color:var(--cyan);}
+  #micLog .ml-label{font-weight:600;}
+  #micLog li.sent .ml-label{color:var(--cyan);}
+  #micLog .ml-conf{opacity:.75; font-size:10px;}
+  #micLog .ml-time{opacity:.5; font-size:10px;}
+
+  #toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--red); color:#2a0303; padding:10px 18px; border-radius:4px;
+    font-size:12px; opacity:0; transition:.25s; pointer-events:none;
+  }
+  #toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bảng Điều Khiển</h1>
+
+  <div class="badge-group">
+    <div class="badge"><span class="dot" id="carDot"></span><span id="carText">Xe: Chưa kết nối</span></div>
+    <div class="badge"><span class="dot" id="micDot"></span><span id="micText">EspMic Edge Impulse: chưa kết nối</span></div>
+    <div class="badge"><span class="dot" id="androidDot"></span><span id="androidText">App Android: chưa kết nối</span></div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- CỘT TRÁI: điều khiển -->
+  <div class="col">
+    <button id="btnStart">Bắt đầu</button>
+
+    <p class="section-label">Điều hướng</p>
+    <div class="dpad">
+      <div class="empty"></div><button data-cmd="tien">▲ Tien</button><div class="empty"></div>
+      <button data-cmd="retrai">◀ Re trai</button>
+      <button id="btnDung" data-cmd="dung">■ Dung</button>
+      <button data-cmd="rephai">Re phai ▶</button>
+      <div class="empty"></div><button data-cmd="lui">▼ Lui</button><div class="empty"></div>
+    </div>
+
+    <p class="section-label">Xoay tai cho</p>
+    <div class="rotrow">
+      <button data-cmd="xoaytrai">↺ Xoay trai</button>
+      <button data-cmd="xoayphai">↻ Xoay phai</button>
+    </div>
+
+    <p class="section-label">Toc do</p>
+    <div class="speed-row">
+      <input type="range" id="speedRange" min="40" max="200" value="120" disabled>
+      <span id="speedVal">120</span>
+    </div>
+  </div>
+
+  <!-- CỘT GIỮA: radar mô phỏng -->
+  <div class="col" id="radarWrap">
+    <p class="section-label" style="align-self:flex-start;">Vị trí mô phỏng (dead-reckoning)</p>
+    <canvas id="radar" width="480" height="480"></canvas>
+    <div class="radar-meta">
+      <span>X: <b id="metaX">300</b></span>
+      <span>Y: <b id="metaY">300</b></span>
+      <span>Hướng: <b id="metaH">0°</b></span>
+      <span>Chế độ: <b id="metaMode">dung</b></span>
+    </div>
+  </div>
+
+  <!-- CỘT PHẢI: lịch sử -->
+  <div class="col">
+    <p class="section-label">LỊCH SỬ 10 LỆNH GẦN ĐÂY</p>
+    <ul id="history"></ul>
+
+    <p class="section-label" style="margin-top:22px;">LOG NHẬN DIỆN MIC (REAL-TIME)</p>
+    <ul id="micLog"></ul>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const socket = io();
+const CANVAS_SCALE = 480/600; // canvas ve nho hon toa do server (600x600)
+
+socket.on('connect', () => socket.emit('register', {role:'web'}));
+socket.on('registered', () => {});
+
+socket.on('car_status', d => {
+  document.getElementById('carDot').classList.toggle('on', d.connected);
+  document.getElementById('carText').textContent = 'Xe: ' + (d.connected ? 'da ket noi' : 'chua ket noi');
+});
+
+function capNhatTrangThaiThietBi(mic, android){
+  document.getElementById('micDot').classList.toggle('on', mic);
+  document.getElementById('micText').textContent =
+    'EspMic Edge Impulse: ' + (mic ? 'da ket noi' : 'chua ket noi');
+  document.getElementById('androidDot').classList.toggle('on', android);
+  document.getElementById('androidText').textContent =
+    'App Android: ' + (android ? 'da ket noi' : 'chua ket noi');
+}
+
+socket.on('device_status_update', d => capNhatTrangThaiThietBi(d.mic, d.android));
+
+socket.on('running_status', d => {
+  const btn = document.getElementById('btnStart');
+  btn.classList.toggle('running', d.running);
+  btn.textContent = d.running ? 'Kết thúc' : 'Bắt đầu';
+  document.getElementById('speedRange').disabled = !d.running;
+});
+
+socket.on('speed_update', d => {
+  document.getElementById('speedRange').value = d.v;
+  document.getElementById('speedVal').textContent = d.v;
+});
+
+socket.on('error_msg', d => showToast(d.msg));
+
+socket.on('state_snapshot', d => {
+  document.getElementById('metaX').textContent = Math.round(d.x);
+  document.getElementById('metaY').textContent = Math.round(d.y);
+  document.getElementById('metaH').textContent = Math.round(d.heading) + '°';
+  document.getElementById('metaMode').textContent = d.mode;
+  document.getElementById('speedRange').disabled = !d.running;
+  if (typeof d.mic_connected !== 'undefined') {
+    capNhatTrangThaiThietBi(d.mic_connected, d.android_connected);
+  }
+  drawRadar(d);
+});
+
+socket.on('history_update', list => {
+  const ul = document.getElementById('history');
+  ul.innerHTML = '';
+  list.forEach(h => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="h-cmd">${h.cmd}</span><span>${h.time}</span><span class="h-src">${h.source}</span>`;
+    ul.appendChild(li);
+  });
+});
+
+socket.on('mic_log_update', list => {
+  const ul = document.getElementById('micLog');
+  ul.innerHTML = '';
+  list.forEach(m => {
+    const li = document.createElement('li');
+    li.className = m.sent ? 'sent' : '';
+    const trangThai = m.sent ? '✓ đã gửi' : '';
+    const db = (typeof m.db === 'number') ? `${m.db.toFixed(1)}dB` : '';
+    li.innerHTML = `<span class="ml-label">${m.label}</span>` +
+      `<span class="ml-conf">${m.conf.toFixed(2)} · ${m.ms}ms · ${db} ${trangThai}</span>` +
+      `<span class="ml-time">${m.time}</span>`;
+    ul.appendChild(li);
+  });
+});
+
+document.getElementById('btnStart').addEventListener('click', () => {
+  const running = document.getElementById('btnStart').classList.contains('running');
+  socket.emit(running ? 'stop' : 'start', {source:'web'});
+});
+
+document.querySelectorAll('.dpad [data-cmd], .rotrow [data-cmd]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    socket.emit('web_command', {cmd: btn.dataset.cmd, source:'web'});
+  });
+});
+
+const speedRangeEl = document.getElementById('speedRange');
+
+// 'input' chi cap nhat so hien thi ngay khi keo, KHONG gui lenh
+speedRangeEl.addEventListener('input', e => {
+  document.getElementById('speedVal').textContent = e.target.value;
+});
+
+// 'change' chi bat khi tha tay ra (mouseup/touchend) -> luc nay moi gui lenh
+speedRangeEl.addEventListener('change', e => {
+  socket.emit('set_speed', {v: parseInt(e.target.value), source:'web'});
+});
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// ===== Radar drawing =====
+const cv = document.getElementById('radar');
+const ctx = cv.getContext('2d');
+
+function drawRadar(d){
+  const w = cv.width, h = cv.height;
+  ctx.clearRect(0,0,w,h);
+
+  // luoi radar
+  ctx.strokeStyle = 'rgba(95,208,196,0.15)';
+  ctx.lineWidth = 1;
+  for(let r = 40; r <= 220; r += 40){
+    ctx.beginPath();
+    ctx.arc(w/2, h/2, r, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, h/2); ctx.lineTo(w, h/2);
+  ctx.moveTo(w/2, 0); ctx.lineTo(w/2, h);
+  ctx.stroke();
+
+  // vi tri xe (toa do server 600x600 -> canvas 480x480)
+  const x = d.x * CANVAS_SCALE;
+  const y = d.y * CANVAS_SCALE;
+  const heading = d.heading * Math.PI / 180;
+
+  // vet duong di (cham mo tinh nhe, khong luu lich su day du de don gian)
+  ctx.fillStyle = 'rgba(255,180,84,0.9)';
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(heading);
+  drawCarIcon(ctx);
+  ctx.restore();
+}
+
+// Bo khung hinh chu nhat be tron - dung chung cho than xe va banh xe
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Ve mo hinh xe 4 banh nhin tu tren xuong (khung acrylic + banh den mam vang),
+// giong bo khung that cua xe. He truc cuc bo: x duong = huong mui xe.
+function drawCarIcon(ctx){
+  const L = 30, W = 18;          // chieu dai / chieu rong khung xe
+  const halfL = L / 2, halfW = W / 2;
+  const wheelL = 11, wheelW = 5.5;
+
+  const banhXe = [
+    [ halfL - 5,  halfW + 1.5],  // banh truoc phai
+    [ halfL - 5, -halfW - 1.5],  // banh truoc trai
+    [-halfL + 5,  halfW + 1.5],  // banh sau phai
+    [-halfL + 5, -halfW - 1.5],  // banh sau trai
+  ];
+
+  banhXe.forEach(([wx, wy]) => {
+    ctx.save();
+    ctx.translate(wx, wy);
+    ctx.fillStyle = '#161616';                 // lop den
+    roundRect(ctx, -wheelL/2, -wheelW/2, wheelL, wheelW, 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffcc33';                  // mam vang
+    ctx.beginPath();
+    ctx.arc(0, 0, wheelW/2 - 0.9, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // than xe kieu tam acrylic trong mo
+  ctx.fillStyle = 'rgba(223,232,228,0.20)';
+  ctx.strokeStyle = 'rgba(95,208,196,0.85)';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, -halfL, -halfW, L, W, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  // dau xe - chi bao huong dang di (mau amber)
+  ctx.beginPath();
+  ctx.moveTo(halfL, 0);
+  ctx.lineTo(halfL - 7, -5);
+  ctx.lineTo(halfL - 7, 5);
+  ctx.closePath();
+  ctx.fillStyle = '#ffb454';
+  ctx.shadowColor = '#ffb454';
+  ctx.shadowBlur = 8;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+// ve khung ban dau
+drawRadar({x:300, y:300, heading:0});
+</script>
+</body>
+</html>
